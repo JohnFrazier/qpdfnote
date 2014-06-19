@@ -1,0 +1,14 @@
+notes:
+markdown notes with references.- pygments
+
+citations:
+cst-json or bibtex file with references
+
+connect to other applications? browser, mupdf, mpv etc
+
+notes style popup.
+
+grab active window title for reference?
+
+cffi
+https://github.com/andre-d/pympv
