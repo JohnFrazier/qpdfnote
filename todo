@@ -1,14 +1,14 @@
 notes:
-markdown notes with references.- pygments
+  markdown notes with references.- pygments
 
 citations:
-cst-json or bibtex file with references
+csl-json or bibtex file with references
+  links in markdown, with generated citation info as tooltip
+  line numbers are :n in chicago style
+  http://english.stackexchange.com/questions/146014/how-should-an-author-cite-a-page-and-line-number-range-that-spans-across-multipl
 
 connect to other applications? browser, mupdf, mpv etc
-
-notes style popup.
+  https://github.com/andre-d/pympv
 
 grab active window title for reference?
 
-cffi
-https://github.com/andre-d/pympv

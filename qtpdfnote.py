@@ -3,13 +3,14 @@ import sys
 from PyQt4 import QtGui
 from PyQt4.QtCore import Qt, QEvent
 import popplerqt4
+import citations
 
 usage = """
 Demo to load a PDF and display the first page.
 
 Usage:
 
-    python demo.py file.pdf
+    qtpdfnote.py file.pdf
 
 """
 
@@ -19,18 +20,31 @@ class Overlay(QtGui.QWidget):
         palette = QtGui.QPalette(self.palette())
         palette.setColor(palette.Base, Qt.transparent)
         self.setPalette(palette)
-#        self.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)
 
+    def paintEvent(self, event):
+        painter = QtGui.QPainter()
+        painter.begin(self)
+        self.drawFigures(painter)
+        painter.end()
+
+    def drawFigures(self, painter):
+        pass
 
 class OverlayEdit(Overlay):
     def __init__(self, parent = None):
         super(OverlayEdit, self).__init__(parent)
+        self.figures=[]
 
-        self.editor=QtGui.QTextEdit()
-        self.editor.setPlainText("olay")
-
-        self.vlayout = QtGui.QVBoxLayout(self)
-        self.vlayout.addWidget(self.editor)
+    def drawFigures(self, painter):
+        fgcolor = QtGui.QColor(0,0,0,122)
+        fgcolor.setNamedColor("yellow")
+        fgcolor.setAlpha(127)
+        edgecolor = QtGui.QColor(0,0,0,122)
+        painter.setPen(edgecolor)
+        painter.setBrush(fgcolor)
+        for a in self.figures:
+            painter.drawRect(a)
 
 class Pdf():
     def __init__(self, filename):
@@ -49,6 +63,13 @@ class Pdf():
         self.page = self.doc.page(num)
         return self.getPageImage()
 
+    def getWordPos(self):
+        result = []
+        words = self.page.text()
+        return [w.bbox.getRect() for w in words]
+
+    def getTextAreas(self):
+        return [w.boundingBox() for w in self.page.textList()]
 
 class Window(QtGui.QMainWindow):
     def __init__(self, pdf, parent = None):
@@ -65,14 +86,14 @@ class Window(QtGui.QMainWindow):
         self.vbox = QtGui.QVBoxLayout(self.generic)
         self.vbox.addWidget(self.pdfArea)
 
-        self.setPage(0)
-
         self.setCentralWidget(self.pdfArea)
-        #self.overlay = OverlayEdit(self.centralWidget())
+        self.overlay = OverlayEdit(self.centralWidget())
         self.keybinds = {
                 Qt.Key_Space: self.pgDnEvent,
                 Qt.Key_D: self.pgDnEvent,
                 Qt.Key_U: self.pgUpEvent}
+
+        self.setPage(0)
 
     def pgDnEvent(self, event):
         if self.pdf.pageNum < self.pdf.pages:
@@ -94,9 +115,16 @@ class Window(QtGui.QMainWindow):
         self.pdflabel.setPixmap(QtGui.QPixmap.fromImage(
             self.pdf.getPage(pageNum)))
         self.pdfArea.setWidget(self.pdflabel)
+        self.setFiguresPoints(self.pdf.getTextAreas())
+
+    def setFiguresPoints(self, figures):
+        pageSize = self.pdf.page.pageSize()
+        #fpercent = [[f / p for f in fig for p in pageSize ]for fig in figures]
+        fpercent = [ f for f in figures ]
+        self.overlay.figures = fpercent
 
     def resizeEvent(self, event):
-        #self.overlay.resize(event.size())
+        self.overlay.resize(event.size())
         event.ignore()
 
     def quitEvent(self, event):
