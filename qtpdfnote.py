@@ -32,7 +32,7 @@ class Overlay(QtGui.QWidget):
         pass
 
 class OverlayEdit(Overlay):
-    def __init__(self, parent = None):
+    def __init__(self, parent=None):
         super(OverlayEdit, self).__init__(parent)
         self.figures=[]
 
@@ -46,22 +46,54 @@ class OverlayEdit(Overlay):
         for a in self.figures:
             painter.drawRect(a)
 
+class PdfState():
+    def __init__(self, filename, page=1, zoom=1, rotate=None, hints=None):
+        self.filename = filename
+        self.page = page
+        self.zoom = zoom
+        if rotate:
+            self.rotate = rotate
+        else:
+            self.rotate = popplerqt4.Poppler.Page.Rotate0
+        self.rotate = rotate
+        if not hints:
+            self.renderHints = [ popplerqt4.Poppler.Document.Antialiasing,
+                    popplerqt4.Poppler.Document.TextAntialiasing ]
+        else:
+            self.renderHints = hints
+
 class Pdf():
     def __init__(self, filename):
+        self.state=PdfState(filename)
         self.doc = popplerqt4.Poppler.Document.load(filename)
-        self.doc.setRenderHint(popplerqt4.Poppler.Document.Antialiasing)
-        self.doc.setRenderHint(popplerqt4.Poppler.Document.TextAntialiasing)
-        self.page = self.doc.page(1)
-        self.pageNum = 1
-        self.pages = self.doc.numPages() - 1 # count from zero as poppler.doc does
+        self.page = self.doc.page(self.state.page - 1)
+        self.pages = self.doc.numPages() # count from zero as poppler.doc does
+
+    def setOptions(self, state=None):
+        if state:
+            if state.filename != self.state.filename:
+                self.doc = popplerqt4.Poppler.Document.load(state.filename)
+            self.state = state
+        for r in self.state.renderHints:
+            self.doc.setRenderHint(r)
+        self.page = self.doc.page(self.state.page - 1)
+
+    def decPage(self):
+        if 1 < self.state.page:
+            self.state.page -= 1
+            self.page = self.doc.page(self.state.page - 1 )
+            return True
+        return False
+
+    def incPage(self):
+        if self.pages > self.state.page:
+            self.state.page += 1
+            self.page = self.doc.page(self.state.page - 1)
+            return True
+        return False
 
     def getPageImage(self):
         return self.page.renderToImage()
-
-    def getPage(self, num):
-        self.pageNum = num
-        self.page = self.doc.page(num)
-        return self.getPageImage()
 
     def getWordPos(self):
         result = []
@@ -70,6 +102,9 @@ class Pdf():
 
     def getTextAreas(self):
         return [w.boundingBox() for w in self.page.textList()]
+
+    def getText(self):
+        return self.page.textList()
 
 class Window(QtGui.QMainWindow):
     def __init__(self, pdf, parent = None):
@@ -90,19 +125,30 @@ class Window(QtGui.QMainWindow):
         self.overlay = OverlayEdit(self.centralWidget())
         self.keybinds = {
                 Qt.Key_Space: self.pgDnEvent,
-                Qt.Key_D: self.pgDnEvent,
-                Qt.Key_U: self.pgUpEvent}
-
-        self.setPage(0)
+                Qt.Key_J: self.pgDnEvent,
+                Qt.Key_K: self.pgUpEvent,
+                Qt.Key_Up: self.pgUpEvent,
+                Qt.Key_Down: self.pgDnEvent,
+                Qt.Key_Plus: self.zoomIncEvent,
+                Qt.Key_Minus: self.zoomDecEvent}
+        self.setPage()
 
     def pgDnEvent(self, event):
-        if self.pdf.pageNum < self.pdf.pages:
-            self.setPage(self.pdf.pageNum + 1)
+        if self.pdf.incPage():
+            self.setPage()
+        event.accept()
+
+    def zoomIncEvent(self, event):
+        self.pdf.incZoom()
+        event.accept()
+
+    def zoomDecEvent(self, event):
+        self.pdf.decZoom()
         event.accept()
 
     def pgUpEvent(self, event):
-        if self.pdf.pageNum > 0:
-            self.setPage(self.pdf.pageNum - 1)
+        if self.pdf.decPage():
+            self.setPage()
         event.accept()
 
     def keyPressEvent(self, event):
@@ -111,9 +157,9 @@ class Window(QtGui.QMainWindow):
         else:
             return event.ignore()
 
-    def setPage(self, pageNum):
+    def setPage(self):
         self.pdflabel.setPixmap(QtGui.QPixmap.fromImage(
-            self.pdf.getPage(pageNum)))
+            self.pdf.getPageImage()))
         self.pdfArea.setWidget(self.pdflabel)
         self.setFiguresPoints(self.pdf.getTextAreas())
 
@@ -140,9 +186,9 @@ def main(argv = None):
 
     filename = argv[-1]
     pdf = Pdf(filename)
-    view = Window(pdf)
-    view.show()
-    return (app, view)
+    lview = Window(pdf)
+    lview.show()
+    return (app, lview)
 
 if __name__ == "__main__":
     app, view = main()
