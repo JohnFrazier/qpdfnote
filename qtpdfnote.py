@@ -46,6 +46,13 @@ class OverlayEdit(Overlay):
         for a in self.figures:
             painter.drawRect(a)
 
+class DisplayInfo():
+    def __init__(self, app):
+        window = app.desktop().window().x11Info()
+        self.depth = window.depth()
+        self.dpiX = window.appDpiX()
+        self.dpiY = window.appDpiY()
+
 class PdfState():
     def __init__(self, filename, page=1, zoom=1, rotate=None, hints=None):
         self.filename = filename
@@ -76,21 +83,34 @@ class Pdf():
             self.state = state
         for r in self.state.renderHints:
             self.doc.setRenderHint(r)
-        self.page = self.doc.page(self.state.page - 1)
+        resetPage()
 
     def decPage(self):
         if 1 < self.state.page:
             self.state.page -= 1
-            self.page = self.doc.page(self.state.page - 1 )
+            self.resetPage()
             return True
         return False
 
     def incPage(self):
         if self.pages > self.state.page:
             self.state.page += 1
-            self.page = self.doc.page(self.state.page - 1)
+            self.resetPage()
             return True
         return False
+
+    def resetPage(self):
+        self.page = self.doc.page(self.state.page - 1)
+
+    def incZoom(self):
+        self.state.zoom *= 2
+        print(self.state.zoom)
+        self.resetPage()
+
+    def decZoom(self):
+        self.state.zoom /= 2
+        print(self.state.zoom)
+        self.resetPage()
 
     def getPageImage(self):
         return self.page.renderToImage()
@@ -107,13 +127,12 @@ class Pdf():
         return self.page.textList()
 
 class Window(QtGui.QMainWindow):
-    def __init__(self, pdf, parent = None):
+    def __init__(self, ctx, parent = None):
         QtGui.QMainWindow.__init__(self, parent)
         self.generic = QtGui.QWidget(self)
         self.pdflabel = QtGui.QLabel(self)
         self.pdfArea = QtGui.QScrollArea()
-
-        self.pdf = pdf
+        self.ctx=ctx
 
         self.pal = QtGui.QPalette(self.palette())
         self.setWindowTitle('Pdf notes')
@@ -133,22 +152,25 @@ class Window(QtGui.QMainWindow):
                 Qt.Key_Minus: self.zoomDecEvent}
         self.setPage()
 
-    def pgDnEvent(self, event):
-        if self.pdf.incPage():
-            self.setPage()
-        event.accept()
 
     def zoomIncEvent(self, event):
-        self.pdf.incZoom()
+        self.ctx.pdf.incZoom()
+        self.setPage()
         event.accept()
 
     def zoomDecEvent(self, event):
-        self.pdf.decZoom()
+        self.ctx.pdf.decZoom()
+        self.setPage()
+        event.accept()
+
+    def pgDnEvent(self, event):
+        self.ctx.pdf.incPage()
+        self.setPage()
         event.accept()
 
     def pgUpEvent(self, event):
-        if self.pdf.decPage():
-            self.setPage()
+        self.ctx.pdf.decPage()
+        self.setPage()
         event.accept()
 
     def keyPressEvent(self, event):
@@ -159,12 +181,12 @@ class Window(QtGui.QMainWindow):
 
     def setPage(self):
         self.pdflabel.setPixmap(QtGui.QPixmap.fromImage(
-            self.pdf.getPageImage()))
+            self.ctx.pdf.getPageImage( )))
         self.pdfArea.setWidget(self.pdflabel)
-        self.setFiguresPoints(self.pdf.getTextAreas())
+        self.setFiguresPoints(self.ctx.pdf.getTextAreas())
 
     def setFiguresPoints(self, figures):
-        pageSize = self.pdf.page.pageSize()
+        pageSize = self.ctx.pdf.page.pageSize()
         #fpercent = [[f / p for f in fig for p in pageSize ]for fig in figures]
         fpercent = [ f for f in figures ]
         self.overlay.figures = fpercent
@@ -176,22 +198,33 @@ class Window(QtGui.QMainWindow):
     def quitEvent(self, event):
         QtGui.QApplication.postEvent(self,QEvent(QEvent.Close))
 
+class Context():
+    def __init__(self, filename=None):
+        self.app = QtGui.QApplication(sys.argv)
+        self.pdf = None
+        if filename:
+            self.pdf = Pdf(filename)
+        self.window = Window(self)
+        self.dpy = DisplayInfo(self.app)
+        self.updateQueue = []
+
+    def showWindow(self):
+        self.window.show()
+
 def main(argv = None):
-    app = QtGui.QApplication(sys.argv)
-    if argv == None:
-        argv = QtGui.QApplication.arguments()
+    if not argv:
+        argv = sys.argv
     if len(argv) < 2:
         sys.stderr.write(usage)
         return None
 
     filename = argv[-1]
-    pdf = Pdf(filename)
-    lview = Window(pdf)
-    lview.show()
-    return (app, lview)
+    ctx = Context(filename=filename)
+    ctx.showWindow()
+    return ctx
 
 if __name__ == "__main__":
-    app, view = main()
-    if app:
-        sys.exit(app.exec_())
+    ctx = main()
+    if ctx:
+        sys.exit(ctx.app.exec_())
     sys.exit(1)
